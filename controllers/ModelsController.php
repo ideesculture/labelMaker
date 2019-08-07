@@ -22,7 +22,6 @@ class ModelsController  extends ActionController {
 	}
 
 	public function Index() {
-
 		return $this->render('index_html.php');
 	}
 }
