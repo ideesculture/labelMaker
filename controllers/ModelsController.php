@@ -1,5 +1,6 @@
 <?php
 require_once(__CA_MODELS_DIR__."/ca_bundle_displays.php");
+require_once(__CA_LIB_DIR__."/ca/ResultContext.php");
 
 class ModelsController  extends ActionController {
 	# -------------------------------------------------------
@@ -24,13 +25,12 @@ class ModelsController  extends ActionController {
 	}
 
 	public function Index() {
-		return $this->render('demo_html.php');
+		return "";
 	}
 
     public function Create() {
-	    $display = $this->request->getParameter("display", pInteger);
-	    $this->view->setVar("display_id", $display);
-	    $vt_display = new ca_bundle_displays($display);
+        $vs_table_name = $this->request->getParameter("results", pString);
+        $this->view->setVar("tableName", $vs_table_name);
 
 	    $this->view->setVar("bundles", [
 	        "ca_objects"=>$this->opo_config->getAssoc("ca_objects"),
@@ -38,13 +38,15 @@ class ModelsController  extends ActionController {
             "ca_entities"=>$this->opo_config->getAssoc("ca_entities")
         ]);
 
+	    // Get results for current search
+        $resultContext = ResultContext::getResultContextForLastFind($this->getRequest(),$vs_table_name);
+        $list = $resultContext->getResultList();
+        $numResults = sizeof($list);
+        $this->view->setVar("numResults", $numResults);
+        $vs_back_text = $numResults." résultats";
 
-        $display_label = reset(reset(reset($vt_display->getPreferredLabels())));
-        $display_label = $display_label["name"];
-        $this->view->setVar("display_label", $display_label);
-
-        $vt_placements = $vt_display->getPlacements();
-        $this->view->setVar("placements", $vt_placements);
+        $resultsLink = ResultContext::getResultsLinkForLastFind($this->getRequest(), $vs_table_name,  $vs_back_text, '');
+        $this->view->setVar("resultsLink", $resultsLink);
 
         $layouts = [];
         if ($handle = opendir(__CA_BASE_DIR__."/app/plugins/labelMaker/layouts")) {
@@ -59,7 +61,40 @@ class ModelsController  extends ActionController {
         return $this->render('create_html.php');
     }
 
-	public function Displays() {
+    public function CreateFloating() {
+        $vs_table_name = $this->request->getParameter("results", pString);
+        $this->view->setVar("tableName", $vs_table_name);
+
+        $this->view->setVar("bundles", [
+            "ca_objects"=>$this->opo_config->getAssoc("ca_objects"),
+            "ca_collections"=>$this->opo_config->getAssoc("ca_collections"),
+            "ca_entities"=>$this->opo_config->getAssoc("ca_entities")
+        ]);
+
+        // Get results for current search
+        $resultContext = ResultContext::getResultContextForLastFind($this->getRequest(),$vs_table_name);
+        $list = $resultContext->getResultList();
+        $numResults = sizeof($list);
+        $this->view->setVar("numResults", $numResults);
+        $vs_back_text = $numResults." résultats";
+
+        $resultsLink = ResultContext::getResultsLinkForLastFind($this->getRequest(), $vs_table_name,  $vs_back_text, '');
+        $this->view->setVar("resultsLink", $resultsLink);
+
+        $layouts = [];
+        if ($handle = opendir(__CA_BASE_DIR__."/app/plugins/labelMaker/layouts")) {
+            while (false !== ($entry = readdir($handle))) {
+                if ($entry != "." && $entry != ".." && $entry != "readme.MD") {
+                    array_push($layouts, "$entry\n");
+                }
+            }
+            closedir($handle);
+        }
+        $this->view->setVar("layouts", $layouts);
+        return $this->render('create_floating_html.php');
+    }
+
+    public function Displays() {
         $t_display = new ca_bundle_displays();
         $this->view->setVar('t_display', $t_display);
         $this->view->setVar('display_list', $va_displays = caExtractValuesByUserLocale($t_display->getBundleDisplays(array('table'=>'ca_objects', 'user_id' => $this->request->getUserID(), 'access' => __CA_BUNDLE_DISPLAY_READ_ACCESS__)), null, null, array()));
@@ -74,8 +109,8 @@ class ModelsController  extends ActionController {
     }
 
     public function Preview() {
-	    $labelContent = $this->request->getParameter("labelContent", pString);
-	    $paperWidth = $this->request->getParameter("paperWidth", pFloat);
+        $labelContent = $this->request->getParameter("labelContent", pString);
+        $paperWidth = $this->request->getParameter("paperWidth", pFloat);
         $paperHeight = $this->request->getParameter("paperHeight", pFloat);
         $nbCols = $this->request->getParameter("nbColumns", pInteger);
         $nbRows = $this->request->getParameter("nbRows", pInteger);
@@ -85,18 +120,64 @@ class ModelsController  extends ActionController {
         $verticalPadding = $this->request->getParameter("verticalPadding", pFloat);
         $marginTop = $this->request->getParameter("marginTop", pFloat);
         $marginLeft = $this->request->getParameter("marginLeft", pFloat);
+        $vs_content = $this->b64DecodeUnicode($labelContent);
 
         $this->view->setVar("measures", array(
-           "paper"=>array("width"=>$paperWidth, "height"=>$paperHeight),
-           "margins"=>array("top"=>$marginTop, "left"=>$marginLeft),
-           "nb"=>array("cols"=>$nbCols, "rows"=>$nbRows),
-           "label"=>array("width"=>$labelWidth, "height"=>$labelHeight),
-           "padding"=>array("horizontal"=>$horizontalPadding, "vertical"=>$verticalPadding)
+            "paper"=>array("width"=>$paperWidth, "height"=>$paperHeight),
+            "margins"=>array("top"=>$marginTop, "left"=>$marginLeft),
+            "nb"=>array("cols"=>$nbCols, "rows"=>$nbRows),
+            "label"=>array("width"=>$labelWidth, "height"=>$labelHeight),
+            "padding"=>array("horizontal"=>$horizontalPadding, "vertical"=>$verticalPadding)
         ));
         $this->view->setVar("content", $this->b64DecodeUnicode($labelContent));
 
-        return $this->render('generate_sample_html.php');
+        $vs_content= $this->render('generate_sample_pdf.php', true);
+        print $vs_content;
+        die();
     }
+
+    public function Generate() {
+        $vs_table_name = $this->request->getParameter("results", pString);
+        $this->view->setVar("tableName", $vs_table_name);
+
+        $labelContent = $this->request->getParameter("labelContent", pString);
+        $paperWidth = $this->request->getParameter("paperWidth", pFloat);
+        $paperHeight = $this->request->getParameter("paperHeight", pFloat);
+        $nbCols = $this->request->getParameter("nbColumns", pInteger);
+        $nbRows = $this->request->getParameter("nbRows", pInteger);
+        $labelWidth = $this->request->getParameter("labelWidth", pFloat);
+        $labelHeight = $this->request->getParameter("labelHeight", pFloat);
+        $horizontalPadding = $this->request->getParameter("horizontalPadding", pFloat);
+        $verticalPadding = $this->request->getParameter("verticalPadding", pFloat);
+        $marginTop = $this->request->getParameter("marginTop", pFloat);
+        $marginLeft = $this->request->getParameter("marginLeft", pFloat);
+        $vs_content = $this->b64DecodeUnicode($labelContent);
+
+        $this->view->setVar("measures", array(
+            "paper"=>array("width"=>$paperWidth, "height"=>$paperHeight),
+            "margins"=>array("top"=>$marginTop, "left"=>$marginLeft),
+            "nb"=>array("cols"=>$nbCols, "rows"=>$nbRows),
+            "label"=>array("width"=>$labelWidth, "height"=>$labelHeight),
+            "padding"=>array("horizontal"=>$horizontalPadding, "vertical"=>$verticalPadding)
+        ));
+        $this->view->setVar("content", $this->b64DecodeUnicode($labelContent));
+
+        // Get results for current search
+        $resultContext = ResultContext::getResultContextForLastFind($this->getRequest(),$vs_table_name);
+        $list = $resultContext->getResultList();
+        $numResults = sizeof($list);
+        $this->view->setVar("numResults", $numResults);
+        $this->view->setVar("resultsIds", $list);
+        $vs_back_text = $numResults." résultats";
+
+        $resultsLink = ResultContext::getResultsLinkForLastFind($this->getRequest(), $vs_table_name,  $vs_back_text, '');
+        $this->view->setVar("resultsLink", $resultsLink);
+
+        $vs_content= $this->render('generate_pdf.php', true);
+        print $vs_content;
+        die();
+    }
+
     public function PreviewPdf() {
         $labelContent = $this->request->getParameter("labelContent", pString);
         $paperWidth = $this->request->getParameter("paperWidth", pFloat);
@@ -148,6 +229,64 @@ class ModelsController  extends ActionController {
             $this->postError(3100, _t("Could not generate PDF"),"plugin labelMaker : PDF preview");
         }
         return;
+    }
+
+    public function GeneratePdf() {
+        $vs_table_name = $this->request->getParameter("results", pString);
+        $this->view->setVar("tableName", $vs_table_name);
+
+        $labelContent = $this->request->getParameter("labelContent", pString);
+        $paperWidth = $this->request->getParameter("paperWidth", pFloat);
+        $paperHeight = $this->request->getParameter("paperHeight", pFloat);
+        $nbCols = $this->request->getParameter("nbColumns", pInteger);
+        $nbRows = $this->request->getParameter("nbRows", pInteger);
+        $labelWidth = $this->request->getParameter("labelWidth", pFloat);
+        $labelHeight = $this->request->getParameter("labelHeight", pFloat);
+        $horizontalPadding = $this->request->getParameter("horizontalPadding", pFloat);
+        $verticalPadding = $this->request->getParameter("verticalPadding", pFloat);
+        $marginTop = $this->request->getParameter("marginTop", pFloat);
+        $marginLeft = $this->request->getParameter("marginLeft", pFloat);
+        $vs_content = $this->b64DecodeUnicode($labelContent);
+
+        $this->view->setVar("measures", array(
+            "paper"=>array("width"=>$paperWidth, "height"=>$paperHeight),
+            "margins"=>array("top"=>$marginTop, "left"=>$marginLeft),
+            "nb"=>array("cols"=>$nbCols, "rows"=>$nbRows),
+            "label"=>array("width"=>$labelWidth, "height"=>$labelHeight),
+            "padding"=>array("horizontal"=>$horizontalPadding, "vertical"=>$verticalPadding)
+        ));
+        $this->view->setVar("content", $this->b64DecodeUnicode($labelContent));
+
+        // Get results for current search
+        $resultContext = ResultContext::getResultContextForLastFind($this->getRequest(),$vs_table_name);
+        $list = $resultContext->getResultList();
+        $numResults = sizeof($list);
+        $this->view->setVar("numResults", $numResults);
+        $this->view->setVar("resultsIds", $list);
+        $vs_back_text = $numResults." résultats";
+
+        $resultsLink = ResultContext::getResultsLinkForLastFind($this->getRequest(), $vs_table_name,  $vs_back_text, '');
+        $this->view->setVar("resultsLink", $resultsLink);
+
+        $vs_content= $this->render('generate_pdf.php', true);
+        $filename = "label_".$this->request->getUserID()."_".time();
+        file_put_contents(__CA_APP_DIR__."/plugins/labelMaker/tmp/".$filename.".html", $vs_content);
+        $command = "cd ".__CA_APP_DIR__."/plugins/labelMaker/tmp/ && wkhtmltopdf --page-size A4 --margin-bottom 0mm --margin-top ".$marginTop."mm --margin-left ".$marginLeft."mm --margin-right 0mm ".$filename.".html ".$filename.".pdf";
+        exec($command, $output);
+        if($output == []) {
+            header("Content-type:application/pdf");
+            header("Content-Disposition:attachment;filename=label.pdf");
+            readfile(__CA_APP_DIR__."/plugins/labelMaker/tmp/".$filename.".pdf");
+            //unlink(__CA_APP_DIR__."/plugins/labelMaker/tmp/".$filename.".html");
+            unlink(__CA_APP_DIR__."/plugins/labelMaker/tmp/".$filename.".pdf");
+            return;
+        } else {
+	        var_dump($output);die();
+            // Handle errors...
+        }
+
+        return;
+
     }
 
     public function Save() {
