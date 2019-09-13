@@ -39,11 +39,23 @@ class labelMakerPlugin extends BaseApplicationPlugin
 	/**
 	 * Insert into ObjectEditor info (side bar)
 	 */
-	public function hookAppendToEditorInspector(array $va_params = array()) {
-		// Example for editor inspector hook
-		$vs_buf = "";
-		$va_params["caEditorInspectorAppend"] = $vs_buf;
+    public function hookAppendToEditorInspector(array $va_params = array()) {
+/*
+        $t_item = $va_params["t_item"];
 
+        $vs_table_name = $t_item->tableName();
+        $vn_item_id = $t_item->getPrimaryKey();
+        $vn_code = $t_item->getTypeCode();
+
+        if (in_array($vs_table_name, ["ca_objects", "ca_collections"])) {
+            $vs_url = caNavUrl($this->getRequest(), "etatsInrap", "Generer", "Modele5", array("object"=>$vn_item_id, "etat"=>"constat_etat_simple"));
+
+            $vs_buf = "<div style=\"text-align:center;width:100%;margin:10px 0 20px 0;\">"
+                . "<a style='background-color:#1ab3c8;color:white;padding:10px 6px;border-radius:6px;' href='".__CA_URL_ROOT__."/index.php/labelMaker/Models/Create/results/".$vs_table_name."'>Etiquettes INRAP</a></div>";
+
+            $va_params["caEditorInspectorAppend"] = $va_params["caEditorInspectorAppend"] ."<div style='height:2px;'></div>".$vs_buf;
+        }*/
+        
 		return $va_params;
 	}
 	# -------------------------------------------------------
